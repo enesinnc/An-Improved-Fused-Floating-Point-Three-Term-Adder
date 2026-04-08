@@ -1,3 +1,5 @@
+NOTE THAT EXPONENT BIAS IS 127 FOR THIS WORK
+
 Note: === TEST 1: 16 x 1.0 ===
 Time: 40 ns  Iteration: 0  Process: /tb_fp16_adder_tree/line__134  File: C:/Users/pc/VHDL_hazirlik/fused_floating_point_three_term_adder/fused_floating_point_three_term_adder.srcs/sim_1/new/tb_fp16_adder_tree.vhd
 Note: T1_RESULT  sign='0' exp=131 man=0 | OV='0' UF='0' NaN='0' Inf='0'
