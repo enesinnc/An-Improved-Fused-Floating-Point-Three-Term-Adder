@@ -61,7 +61,9 @@ architecture sim of tb_fp16_adder_tree is
     man := to_integer(unsigned(val(MANT_HI downto MANT_LO)));
   end procedure;
 
-  -- Print procedure
+  -- -------------------------------------------------------------------------
+  -- Print procedure (UPDATED WITH REAL NUMBER CALCULATION)
+  -- -------------------------------------------------------------------------
   procedure print_result(
     msg   : in string;
     res   : in std_logic_vector(BF19_WIDTH-1 downto 0);
@@ -69,19 +71,58 @@ architecture sim of tb_fp16_adder_tree is
     uf    : in std_logic;
     nan_f : in std_logic;
     inf_f : in std_logic) is
-    variable sgn : std_logic;
-    variable e   : integer;
-    variable m   : integer;
+    variable sgn      : std_logic;
+    variable e        : integer;
+    variable m        : integer;
+    variable real_val : real;
   begin
     unpack_bf19(res, sgn, e, m);
-    report msg & 
-      "  sign=" & std_logic'image(sgn) & 
-      " exp=" & integer'image(e) & 
-      " man=" & integer'image(m) & 
-      " | OV=" & std_logic'image(ov) & 
-      " UF=" & std_logic'image(uf) & 
-      " NaN=" & std_logic'image(nan_f) & 
-      " Inf=" & std_logic'image(inf_f);
+
+    if e = 255 then
+      if m /= 0 then
+        report msg & "  real=NaN" &
+          " | sign=" & std_logic'image(sgn) &
+          " exp=" & integer'image(e) &
+          " man=" & integer'image(m) &
+          " | OV=" & std_logic'image(ov) & " UF=" & std_logic'image(uf) &
+          " NaN=" & std_logic'image(nan_f) & " Inf=" & std_logic'image(inf_f);
+      else
+        if sgn = '1' then
+          report msg & "  real=-Inf" &
+            " | sign=" & std_logic'image(sgn) & " exp=" & integer'image(e) & " man=" & integer'image(m) &
+            " | OV=" & std_logic'image(ov) & " UF=" & std_logic'image(uf) &
+            " NaN=" & std_logic'image(nan_f) & " Inf=" & std_logic'image(inf_f);
+        else
+          report msg & "  real=+Inf" &
+            " | sign=" & std_logic'image(sgn) & " exp=" & integer'image(e) & " man=" & integer'image(m) &
+            " | OV=" & std_logic'image(ov) & " UF=" & std_logic'image(uf) &
+            " NaN=" & std_logic'image(nan_f) & " Inf=" & std_logic'image(inf_f);
+        end if;
+      end if;
+    elsif e = 0 then
+      report msg & "  real=0.0" &
+        " | sign=" & std_logic'image(sgn) &
+        " exp=" & integer'image(e) &
+        " man=" & integer'image(m) &
+        " | OV=" & std_logic'image(ov) & " UF=" & std_logic'image(uf) &
+        " NaN=" & std_logic'image(nan_f) & " Inf=" & std_logic'image(inf_f);
+    else
+      -- Calculate decimal real value
+      real_val := (1.0 + real(m) / 1024.0) * (2.0 ** (e - 127));
+      if sgn = '1' then
+        real_val := -real_val;
+      end if;
+      
+      report msg &
+        "  real=" & real'image(real_val) &
+        " | sign=" & std_logic'image(sgn) &
+        " exp=" & integer'image(e) &
+        " man=" & integer'image(m) &
+        " | OV=" & std_logic'image(ov) &
+        " UF=" & std_logic'image(uf) &
+        " NaN=" & std_logic'image(nan_f) &
+        " Inf=" & std_logic'image(inf_f);
+    end if;
   end procedure;
 
   -- -------------------------------------------------------------------------
@@ -94,17 +135,19 @@ architecture sim of tb_fp16_adder_tree is
   constant BF19_FOUR   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 129, 0);
   constant BF19_MFOUR  : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('1', 129, 0);
   constant BF19_HALF   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 126, 0);
+  constant BF19_2048   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 138, 0);
+  constant BF19_4096   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 139, 0);
   constant BF19_NAN    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 255, 512);
   constant BF19_ZERO_C : std_logic_vector(BF19_WIDTH-1 downto 0) := (others => '0');
-  
+
   -- Edge-Case Constants
-  constant BF19_BIG    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 150, 0);    -- 2^23
-  constant BF19_MBIG   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('1', 150, 0);    -- -(2^23)
-  constant BF19_TINY   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 100, 0);    -- 2^-27
-  constant BF19_MAX    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 254, 1023); -- Maximum Normal Positive
-  constant BF19_MIN    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 1, 0);      -- Minimum Normal Positive
-  constant BF19_INF    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 255, 0);    -- +Infinity
-  constant BF19_MINF   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('1', 255, 0);    -- -Infinity
+  constant BF19_BIG    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 150, 0);
+  constant BF19_MBIG   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('1', 150, 0);
+  constant BF19_TINY   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 100, 0);
+  constant BF19_MAX    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 254, 1023);
+  constant BF19_MIN    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 1, 0);
+  constant BF19_INF    : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('0', 255, 0);
+  constant BF19_MINF   : std_logic_vector(BF19_WIDTH-1 downto 0) := pack_bf19('1', 255, 0);
 
 begin
 
@@ -133,7 +176,7 @@ begin
   -- Stimulus process
   process
     variable pipe_flush : integer := PIPE_DEPTH + 2;
-    
+
     procedure apply_to_all(val : in std_logic_vector(BF19_WIDTH-1 downto 0)) is
     begin
         in0 <= val; in1 <= val; in2 <= val; in3 <= val;
@@ -229,13 +272,7 @@ begin
     wait for CLK_PERIOD * pipe_flush;
     print_result("T11_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
 
-    -- =========================================================================
-    -- YEN� EKLENEN CEB�RSEL (ALGEBRAIC) KOMB�NASYON TESTLER�
-    -- =========================================================================
-
     -- Test 12: A - B + C
-    -- 4.0 - 2.0 + 1.0 = 3.0
-    -- Expected: 3.0 -> exp=128, man=512
     report "=== TEST 12: A - B + C (4.0 - 2.0 + 1.0 = 3.0) ===";
     apply_to_all(BF19_ZERO_C);
     in0 <= BF19_FOUR;
@@ -245,8 +282,6 @@ begin
     print_result("T12_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
 
     -- Test 13: A - B - C
-    -- 4.0 - 2.0 - 1.0 = 1.0
-    -- Expected: 1.0 -> exp=127, man=0
     report "=== TEST 13: A - B - C (4.0 - 2.0 - 1.0 = 1.0) ===";
     apply_to_all(BF19_ZERO_C);
     in0 <= BF19_FOUR;
@@ -256,8 +291,6 @@ begin
     print_result("T13_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
 
     -- Test 14: -A - B - C
-    -- -4.0 - 2.0 - 1.0 = -7.0
-    -- Expected: -7.0 -> sign='1', exp=129, man=768
     report "=== TEST 14: -A - B - C (-4.0 - 2.0 - 1.0 = -7.0) ===";
     apply_to_all(BF19_ZERO_C);
     in0 <= BF19_MFOUR;
@@ -267,8 +300,6 @@ begin
     print_result("T14_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
 
     -- Test 15: Alternating Signs
-    -- 8 * (1.0) + 8 * (-2.0) = -8.0
-    -- Expected: -8.0 -> sign='1', exp=130, man=0
     report "=== TEST 15: Alternating Signs (8x1.0 + 8x-2.0 = -8.0) ===";
     in0 <= BF19_ONE; in1 <= BF19_MTWO; in2 <= BF19_ONE; in3 <= BF19_MTWO;
     in4 <= BF19_ONE; in5 <= BF19_MTWO; in6 <= BF19_ONE; in7 <= BF19_MTWO;
@@ -276,6 +307,32 @@ begin
     in12 <= BF19_ONE; in13 <= BF19_MTWO; in14 <= BF19_ONE; in15 <= BF19_MTWO;
     wait for CLK_PERIOD * pipe_flush;
     print_result("T15_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
+
+    -- =========================================================================
+    -- YENİ EKLENEN HASSASİYET TESTİ (PRECISION & ROUNDING TEST)
+    -- =========================================================================
+    
+    -- Test 16: 2048 + 15 * 1.0
+    -- Mantissa 10 bit olduğu için 2063 sayısı BF19 ile tam temsil edilemez.
+    -- Beklenen: RND_NEAREST_EVEN kuralları gereği sonuç "2064.0" olarak yuvarlanır.
+    report "=== TEST 16: 2048 + fifteen 1.0s (Precision Test) ===";
+    in0  <= BF19_2048;
+    in1  <= BF19_ONE; in2  <= BF19_ONE; in3  <= BF19_ONE;
+    in4  <= BF19_ONE; in5  <= BF19_ONE; in6  <= BF19_ONE; in7  <= BF19_ONE;
+    in8  <= BF19_ONE; in9  <= BF19_ONE; in10 <= BF19_ONE; in11 <= BF19_ONE;
+    in12 <= BF19_ONE; in13 <= BF19_ONE; in14 <= BF19_ONE; in15 <= BF19_ONE;
+    wait for CLK_PERIOD * pipe_flush;
+    print_result("T16_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
+    
+    -- Test 17: 4096 + 15 * 1.0
+    report "=== TEST 17: 4096 + fifteen 1.0s (Precision Test) ===";
+    in0  <= BF19_4096;
+    in1  <= BF19_ONE; in2  <= BF19_ONE; in3  <= BF19_ONE;
+    in4  <= BF19_ONE; in5  <= BF19_ONE; in6  <= BF19_ONE; in7  <= BF19_ONE;
+    in8  <= BF19_ONE; in9  <= BF19_ONE; in10 <= BF19_ONE; in11 <= BF19_ONE;
+    in12 <= BF19_ONE; in13 <= BF19_ONE; in14 <= BF19_ONE; in15 <= BF19_ONE;
+    wait for CLK_PERIOD * pipe_flush;
+    print_result("T17_RESULT", result, exc_overflow, exc_underflow, exc_nan, exc_inf);
 
     report "=== All tests complete ===";
     wait;
